@@ -1,5 +1,6 @@
 #include <Foundation/Foundation.h>
 #include <QuartzCore/QuartzCore.h>
+#include <dispatch/dispatch.h>
 #include <stdint.h>
 #include <IOSurface/IOSurface.h>
 #include <CoreGraphics/CoreGraphics.h>
@@ -8,6 +9,7 @@
 #include <pthread.h>
 #include <objc/runtime.h>
 #include <Metal/Metal.h>
+#include <unistd.h>
 
 
 #define HOOK_INSTANCE_METHOD(CLASS, SELECTOR, REPLACEMENT, ORIGINAL) \
@@ -279,7 +281,7 @@ static void InitializeMetal(void) {
         return;
     }
 
-    // Create fragment shader library  
+    // Create fragment shader library
     id<MTLLibrary> fragmentLibrary = [gMetalDevice newLibraryWithSource:fragmentShaderSource options:nil error:&error];
     if (error) {
         NSLog(@"Failed to create fragment Metal library: %@", error);
@@ -309,10 +311,10 @@ static void InitializeMetal(void) {
 
 static void RenderProteinLogToLayer(CALayer *layer) {
     InitializeMetal();
-    
+
     CGSize size = layer.bounds.size;
     if (size.width <= 0 || size.height <= 0) return;
-    
+
     // Create Metal sublayer if it doesn't exist
     if (!gMetalSublayer) {
         gMetalSublayer = [[CAMetalLayer alloc] init];
@@ -321,16 +323,16 @@ static void RenderProteinLogToLayer(CALayer *layer) {
         gMetalSublayer.frame = layer.bounds;
         gMetalSublayer.drawableSize = CGSizeMake(size.width, size.height);
         gMetalSublayer.opaque = YES;
-        
+
         [layer addSublayer:gMetalSublayer];
     }
-    
+
     // Update frame if needed
     if (!CGRectEqualToRect(gMetalSublayer.frame, layer.bounds)) {
         gMetalSublayer.frame = layer.bounds;
         gMetalSublayer.drawableSize = CGSizeMake(size.width, size.height);
     }
-    
+
     @autoreleasepool {
         // Create drawable
         id<CAMetalDrawable> drawable = [gMetalSublayer nextDrawable];
@@ -338,24 +340,24 @@ static void RenderProteinLogToLayer(CALayer *layer) {
             NSLog(@"Failed to create Metal drawable");
             return;
         }
-        
+
         // Create command buffer
         id<MTLCommandBuffer> commandBuffer = [gMetalCommandQueue commandBuffer];
-        
+
         // Create render pass descriptor
         MTLRenderPassDescriptor *renderPassDescriptor = [[MTLRenderPassDescriptor alloc] init];
         renderPassDescriptor.colorAttachments[0].texture = drawable.texture;
         renderPassDescriptor.colorAttachments[0].loadAction = MTLLoadActionClear;
         renderPassDescriptor.colorAttachments[0].storeAction = MTLStoreActionStore;
         renderPassDescriptor.colorAttachments[0].clearColor = MTLClearColorMake(0.0, 0.0, 0.0, 1.0);
-        
+
         // Begin encoding
         id<MTLRenderCommandEncoder> renderEncoder = [commandBuffer renderCommandEncoderWithDescriptor:renderPassDescriptor];
         [renderEncoder setViewport:(MTLViewport){0.0, 0.0, size.width, size.height, 0.0, 1.0}];
         [renderEncoder setRenderPipelineState:gMetalPipeline];
         [renderEncoder drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:3];
         [renderEncoder endEncoding];
-        
+
         // Present and commit
         [commandBuffer presentDrawable:drawable];
         [commandBuffer commit];
@@ -409,8 +411,30 @@ void UpdateProteinRoot(void) {
 
 __int64 (*_UpdateOld)(__int64 a1, __int64 a2, __int64 a3, __int64 a4);
 __int64 UpdateHook(__int64 a1, __int64 a2, __int64 a3, __int64 a4) {
-    HideAllWindowsTest();
-    UpdateProteinRoot();
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        dispatch_source_t timer = dispatch_source_create(
+            DISPATCH_SOURCE_TYPE_TIMER,
+            0,
+            0,
+            dispatch_get_main_queue()
+        );
+
+        dispatch_source_set_timer(
+            timer,
+            dispatch_time(DISPATCH_TIME_NOW, 0),
+            1 * NSEC_PER_SEC, // once per second
+            0
+        );
+
+        dispatch_source_set_event_handler(timer, ^{
+            HideAllWindowsTest();
+            UpdateProteinRoot();
+        });
+
+        dispatch_resume(timer);
+    });
+
     return _UpdateOld(a1, a2, a3, a4);
 }
 
@@ -431,14 +455,14 @@ void _RenderSetup(void) {
 
 Boolean setupAlready = false;
 void __BootStrapFuncHook(__int64 a1) {
-    if (a1 == 9LL && !setupAlready) { // nine is called when logon.
+    if (!setupAlready) { // nine is called when logon.
         freopen("/tmp/protein.log", "a+", stderr);
         setbuf(stderr, NULL);
 
         _RenderSetup();
         setupAlready = true;
     }
-    _StartSubsidiaryServices(a1);
+    //_StartSubsidiaryServices(a1);
 }
 
 __attribute__((constructor))
@@ -476,3 +500,22 @@ void _TweakConstructor(void) {
     Target = symrez_resolve_once(LibName, "_WSWindowCreate");
     DobbyHook(Target, (void *)MarkWindows, (void **)&_WindowCreate);
 }
+
+
+#define DYLD_INTERPOSE(_replacement,_replacee) \
+   __attribute__((used)) static struct{ const void* replacement; const void* replacee; } _interpose_##_replacee \
+            __attribute__ ((section ("__DATA,__interpose"))) = { (const void*)(unsigned long)&_replacement, (const void*)(unsigned long)&_replacee };
+// don't discard our privilleges
+int _libsecinit_initializer();
+int _libsecinit_initializer_new() {
+    return 0;
+}
+int setegid_new(gid_t gid) {
+    return 0;
+}
+int seteuid_new(uid_t uid) {
+    return 0;
+}
+DYLD_INTERPOSE(_libsecinit_initializer_new, _libsecinit_initializer);
+DYLD_INTERPOSE(setegid_new, setegid);
+DYLD_INTERPOSE(seteuid_new, seteuid);
