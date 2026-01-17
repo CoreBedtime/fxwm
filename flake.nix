@@ -76,7 +76,7 @@
             -framework Foundation -framework IOSurface -framework CoreGraphics -framework QuartzCore \
             -framework Metal \
             -lc++ \
-            libprotein_render.m sym.c
+            libprotein_render.m metal_renderer.m sym.c
         '';
         installPhase = ''
           mkdir -p $out/lib
@@ -148,6 +148,11 @@
     "directory": "DIRPLACEHOLDER/manager",
     "file": "libprotein_render.m",
     "arguments": ["clang", "-dynamiclib", "-framework", "Foundation", "-c", "libprotein_render.m"]
+  },
+  {
+    "directory": "DIRPLACEHOLDER/manager",
+    "file": "metal_renderer.m",
+    "arguments": ["clang", "-dynamiclib", "-framework", "Foundation", "-framework", "Metal", "-framework", "QuartzCore", "-c", "metal_renderer.m"]
   }
  ]
 JSONEOF

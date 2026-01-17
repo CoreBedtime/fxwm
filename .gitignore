@@ -2,3 +2,4 @@ flake.lock
 .cache/
 result
 .claude/
+.DS_Store

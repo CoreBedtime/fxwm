@@ -2,21 +2,19 @@
 
 A low-level window manager experiment for macOS that hooks into the SkyLight compositor layer.
 
-## Overview
+## What it does
 
-fxwm injects into the macOS WindowServer process to intercept and modify compositor behavior. It uses function hooking to tap into private SkyLight framework APIs, allowing for custom window management and rendering at the compositor level.
+fxwm injects into the macOS WindowServer process and takes over rendering. It:
+
+- Stops all normal WindowServer rendering (windows, desktop, dock, etc.)
+- Preserves cursor rendering
+- Draws an animated 3D colored cube using Metal
 
 ## Components
 
-- **fxwm** - The injector binary that loads the dylib into WindowServer
-- **libprotein_render.dylib** - The payload that hooks SkyLight functions and implements custom rendering
-
-## Features
-
-- Hooks `CGXUpdateDisplay` and other SkyLight internals
-- Tracks window creation/destruction via `WSWindowCreate` hooks
-- Creates custom compositor windows using `CAContext` and private APIs
-- Renders an overlay displaying logs from `/tmp/protein.log`
+- **fxwm** - The injector binary that sets up the dylib injection via tmpfs overlay
+- **libprotein_render.dylib** - Hooks SkyLight functions and implements custom Metal rendering
+- **metal_renderer** - Separated Metal rendering code (cube shader, 3D math, animation)
 
 ## Building
 
@@ -28,6 +26,19 @@ nix build
 
 The build produces arm64e binaries (Apple Silicon with pointer authentication).
 
+## Running
+
+```bash
+nix run
+```
+
+Or manually:
+
+```bash
+sudo ./result/bin/fxwm
+# Then `launchctl reboot userspace` to apply the WindowServer injection.
+```
+
 ## Requirements
 
 - macOS on Apple Silicon (arm64e)
@@ -38,7 +49,9 @@ The build produces arm64e binaries (Apple Silicon with pointer authentication).
 
 - Uses [Dobby](https://github.com/jmpews/Dobby) for function hooking on arm64e
 - Resolves private symbols via dyld shared cache parsing
-- Communicates with CoreAnimation via `CAContext` for GPU-accelerated rendering
+- Hooks `CGXUpdateDisplay` to inject custom rendering 
+- Renders via `CAMetalLayer` on a root `CAContext` with a custom Metal pipeline
+- Uses tmpfs overlay on `/System/Library/LaunchDaemons` to inject `DYLD_INSERT_LIBRARIES`
 
 ## License
 
