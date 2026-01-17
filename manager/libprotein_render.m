@@ -1,6 +1,7 @@
 #include <Foundation/Foundation.h>
 #include <QuartzCore/QuartzCore.h>
 #include <dispatch/dispatch.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <IOSurface/IOSurface.h>
 #include <CoreGraphics/CoreGraphics.h>
@@ -394,7 +395,7 @@ void UpdateProteinRoot(void) {
         [CATransaction begin];
         [CATransaction setDisableActions:YES];
         [CATransaction setDisableSignPosts:YES];
-        [CATransaction setCommittingContexts:gRootContextPtr];
+        [CATransaction setCommittingContexts:@[gRootContextPtr]];
         __SERVER_COMMIT_START(&intptr, gRootContextPtr);
 
         gRootContextPtr.layer.backgroundColor = CGColorCreateSRGB(0.5, 0, 0, 1.0);
@@ -410,9 +411,32 @@ void UpdateProteinRoot(void) {
 }
 
 __int64 (*_UpdateOld)(__int64 a1, __int64 a2, __int64 a3, __int64 a4);
+
+bool needsSetup = true;
 __int64 UpdateHook(__int64 a1, __int64 a2, __int64 a3, __int64 a4) {
-    HideAllWindowsTest();
-    UpdateProteinRoot();
+    static dispatch_once_t once;
+    static dispatch_source_t timer = NULL;
+
+    dispatch_once(&once, ^{
+        timer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER,
+                                       0, 0,
+                                       dispatch_get_main_queue());
+
+        dispatch_source_set_timer(timer,
+                                  dispatch_time(DISPATCH_TIME_NOW, 0),
+                                  16 * NSEC_PER_MSEC,
+                                  1 * NSEC_PER_MSEC);
+
+        dispatch_source_set_event_handler(timer, ^{
+            @autoreleasepool {
+                HideAllWindowsTest();
+                UpdateProteinRoot();
+            }
+        });
+
+        dispatch_resume(timer);
+    });
+
     return _UpdateOld(a1, a2, a3, a4);
 }
 
