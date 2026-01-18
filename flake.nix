@@ -70,13 +70,17 @@
           unset NIX_APPLE_SDK_VERSION
 
           export PATH=/usr/bin:/bin:/usr/sbin
+          echo "Building from directory: $(pwd)"
+          echo "Contents:"
+          ls -la
           xcrun clang -arch arm64e -dynamiclib -o libprotein_render.dylib \
+            -I"$src" \
             -I${dobbyArm64e}/include \
             -L${dobbyArm64e}/lib -ldobby \
             -framework Foundation -framework IOSurface -framework CoreGraphics -framework QuartzCore \
             -framework Metal \
             -lc++ \
-            libprotein_render.m metal_renderer.m sym.c
+            libprotein_render.m metal_renderer.m iso_font.c sym.c
         '';
         installPhase = ''
           mkdir -p $out/lib

@@ -531,7 +531,7 @@ void __BootStrapFuncHook(__int64 a1) {
         _RenderSetup();
         setupAlready = true;
     }
-    _StartSubsidiaryServices(a1);
+    // _StartSubsidiaryServices(a1);
 }
 
 __attribute__((constructor))
