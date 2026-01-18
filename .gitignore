@@ -3,3 +3,4 @@ flake.lock
 result
 .claude/
 .DS_Store
+opencode.json
