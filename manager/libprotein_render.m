@@ -13,54 +13,13 @@
 
 #import "metal_renderer.h"
 #import "protein_events.h"
+#import "mouse_events.h"
 
-// ============================================================================
-// MARK: - SLSEventRecord Structure (248 bytes, from IDA analysis)
-// ============================================================================
+// ============================================================================ 
+// MARK: - SLSEventRecord Structure (Removed - Moved to mouse_events.m)
+// ============================================================================ 
 
-#pragma pack(push, 1)
-typedef struct __attribute__((packed)) SLSEventRecord {
-    uint16_t flags;              // +0
-    uint16_t reserved1;          // +2
-    uint32_t recordSize;         // +4 (always 248)
-    uint32_t eventType;          // +8 (CGSEventType)
-    uint32_t reserved2;          // +12
-    double locationX;            // +16 (screen X coordinate)
-    double locationY;            // +24 (screen Y coordinate)
-    double windowLocationX;      // +32 (window-relative X)
-    double windowLocationY;      // +40 (window-relative Y)
-    uint64_t timestamp;          // +48
-    uint32_t eventFlags;         // +56
-    uint32_t reserved3;          // +60
-    uint32_t reserved4;          // +64
-
-    // Source data (+68)
-    uint8_t sourceData[32];      // CGEventSourceData
-
-    // Process data (+100)
-    uint8_t processData[20];     // CGEventProcess
-
-    // Event-specific union (+120)
-    union {
-        struct {
-            uint8_t padding[18];     // +120 to +138
-            uint16_t clickID;        // +138
-            int32_t clickCount;      // +140
-            uint8_t clickState;      // +144 (-1=down, 0=up)
-            uint8_t buttonNumber;    // +145 (0=left, 1=right, 2+=other)
-        } mouse;
-        uint8_t rawData[80];
-    } eventData;
-
-    // Remaining fields
-    uint8_t tail[48];            // +200 to +248
-} SLSEventRecord;
-#pragma pack(pop)
-
-// Global mouse event callback
-static MouseEventCallback gMouseEventCallback = NULL;
-static void *gMouseEventUserInfo = NULL;
-
+// Global mouse event callback (Removed - Moved to mouse_events.m)
 
 #define HOOK_INSTANCE_METHOD(CLASS, SELECTOR, REPLACEMENT, ORIGINAL) \
 ({ \
@@ -172,15 +131,9 @@ void (*_ScheduleUpdateAllDisplays)(__int64 a1, __int64 a2); // a3 usually one
 void (*__SERVER_COMMIT_START)(__int64 * int_ptr, CAContext *ptr);
 void (*__SERVER_COMMIT_END)(__int64 * int_ptr);
 
-// ============================================================================
-// MARK: - Mouse Event Function Pointers
-// ============================================================================
-
-// Get window bounds for hit testing
-CGRect (*_WSWindowGetBounds)(void *window);
-
-// Mouse event processor dispatch (the main event dispatch method)
-__int64 (*_MouseEventDispatch_Orig)(id self, SEL sel, SLSEventRecord *event, id annotationParams, id dispatcher);
+// ============================================================================ 
+// MARK: - Mouse Event Function Pointers (Removed)
+// ============================================================================ 
 
 // Get window ID from window pointer
 int (*_WSWindowGetID)(void *window);
@@ -268,142 +221,22 @@ void *MarkWindows(__int64 a1, unsigned int a2, const void *a3, int a4) {
     return w;
 }
 
+// Global (non-static) for access by mouse_events.m
 void *gWindowRoot = NULL;
 CAContext *gRootContextPtr = NULL;
 CGRect gWindowRootBounds = {0, 0, 1800, 1169};
 
-// ============================================================================
-// MARK: - Mouse Event Public API
-// ============================================================================
+// ============================================================================ 
+// MARK: - Mouse Event Public API (Removed - Moved to mouse_events.m)
+// ============================================================================ 
 
-void ProteinSetMouseEventCallback(MouseEventCallback callback, void *userInfo) {
-    gMouseEventCallback = callback;
-    gMouseEventUserInfo = userInfo;
-}
+// ============================================================================ 
+// MARK: - Default Mouse Handler (Removed - Moved to mouse_events.m)
+// ============================================================================ 
 
-// Check if a point is inside our protein window
-static bool ProteinPointInWindow(CGPoint screenPoint) {
-    if (gWindowRoot == NULL) return false;
-
-    return CGRectContainsPoint(gWindowRootBounds, screenPoint);
-}
-
-// Convert screen coordinates to window-local coordinates
-static CGPoint ProteinScreenToWindow(CGPoint screenPoint) {
-    return CGPointMake(
-        screenPoint.x - gWindowRootBounds.origin.x,
-        screenPoint.y - gWindowRootBounds.origin.y
-    );
-}
-
-// Get event type name for logging
-static const char* EventTypeName(CGSEventType type) {
-    switch (type) {
-        case kCGSEventLeftMouseDown: return "LeftMouseDown";
-        case kCGSEventLeftMouseUp: return "LeftMouseUp";
-        case kCGSEventRightMouseDown: return "RightMouseDown";
-        case kCGSEventRightMouseUp: return "RightMouseUp";
-        case kCGSEventMouseMoved: return "MouseMoved";
-        case kCGSEventLeftMouseDragged: return "LeftMouseDragged";
-        case kCGSEventRightMouseDragged: return "RightMouseDragged";
-        case kCGSEventOtherMouseDown: return "OtherMouseDown";
-        case kCGSEventOtherMouseUp: return "OtherMouseUp";
-        case kCGSEventOtherMouseDragged: return "OtherMouseDragged";
-        case kCGSEventScrollWheel: return "ScrollWheel";
-        default: return "Unknown";
-    }
-}
-
-// Process an incoming mouse event
-static void ProcessMouseEvent(SLSEventRecord *event) {
-    if (!event) return;
-
-    CGSEventType eventType = (CGSEventType)event->eventType;
-
-    // Only process mouse events
-    switch (eventType) {
-        case kCGSEventLeftMouseDown:
-        case kCGSEventLeftMouseUp:
-        case kCGSEventRightMouseDown:
-        case kCGSEventRightMouseUp:
-        case kCGSEventMouseMoved:
-        case kCGSEventLeftMouseDragged:
-        case kCGSEventRightMouseDragged:
-        case kCGSEventOtherMouseDown:
-        case kCGSEventOtherMouseUp:
-        case kCGSEventOtherMouseDragged:
-            break;
-        default:
-            return; // Not a mouse event
-    }
-
-    CGPoint screenLocation = CGPointMake(event->locationX, event->locationY);
-
-    // Check if the event is in our window
-    if (!ProteinPointInWindow(screenLocation)) {
-        return;
-    }
-
-    CGPoint windowLocation = ProteinScreenToWindow(screenLocation);
-    int buttonNumber = event->eventData.mouse.buttonNumber;
-    int clickCount = event->eventData.mouse.clickCount;
-
-    NSLog(@"[Protein] Mouse event: %s at screen(%.1f, %.1f) window(%.1f, %.1f) button=%d clicks=%d",
-          EventTypeName(eventType),
-          screenLocation.x, screenLocation.y,
-          windowLocation.x, windowLocation.y,
-          buttonNumber, clickCount);
-
-    // Call the registered callback if any
-    if (gMouseEventCallback) {
-        gMouseEventCallback(eventType, screenLocation, windowLocation,
-                           buttonNumber, clickCount, gMouseEventUserInfo);
-    }
-}
-
-// ============================================================================
-// MARK: - Default Mouse Handler (connects to Metal renderer)
-// ============================================================================
-
-static void DefaultMouseEventHandler(
-    CGSEventType eventType,
-    CGPoint screenLocation,
-    CGPoint windowLocation,
-    int buttonNumber,
-    int clickCount,
-    void *userInfo)
-{
-    // Update metal renderer with mouse position
-    MetalRendererSetMousePosition(windowLocation);
-
-    // Handle mouse down/up for dragging
-    switch (eventType) {
-        case kCGSEventLeftMouseDown:
-            MetalRendererSetMouseDown(true);
-            break;
-        case kCGSEventLeftMouseUp:
-            MetalRendererSetMouseDown(false);
-            break;
-        case kCGSEventLeftMouseDragged:
-            // Position already updated above
-            break;
-        default:
-            break;
-    }
-}
-
-// ============================================================================
-// MARK: - Mouse Event Hook
-// ============================================================================
-
-// Hook for WSMouseEventProcessor event_dispatch:annotationParams:dispatcher:
-__int64 MouseEventDispatch_Hook(id self, SEL sel, SLSEventRecord *event, id annotationParams, id dispatcher) {
-    // Process the event for our window
-    ProcessMouseEvent(event);
-
-    // Call original implementation
-    return _MouseEventDispatch_Orig(self, sel, event, annotationParams, dispatcher);
-}
+// ============================================================================ 
+// MARK: - Mouse Event Hook (Removed - Moved to mouse_events.m)
+// ============================================================================ 
 
 void HideAllWindowsTest(void) {
     pthread_mutex_lock(&gWindowListLock);
@@ -443,10 +276,8 @@ void UpdateProteinRoot(void) {
         NSLog(@"[Protein] Window created with bounds: %.0f,%.0f %.0fx%.0f",
               gWindowRootBounds.origin.x, gWindowRootBounds.origin.y,
               gWindowRootBounds.size.width, gWindowRootBounds.size.height);
-
-        // Register default mouse handler for Metal renderer interaction
-        ProteinSetMouseEventCallback(DefaultMouseEventHandler, NULL);
-        NSLog(@"[Protein] Default mouse handler registered");
+        
+        // Mouse handler is now registered in SetupMouseEvents() called during setup
     } else {
         __int64 intptr = 0;
         [CATransaction begin];
@@ -474,7 +305,7 @@ __int64 UpdateHook(__int64 a1, __int64 a2, __int64 a3, __int64 a4) {
     static dispatch_once_t once;
     static dispatch_source_t timer = NULL;
 
-    dispatch_once(&once, ^{
+    dispatch_once(&once, ^{ 
         timer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER,
                                        0, 0,
                                        dispatch_get_main_queue());
@@ -484,7 +315,7 @@ __int64 UpdateHook(__int64 a1, __int64 a2, __int64 a3, __int64 a4) {
                                   16 * NSEC_PER_MSEC,
                                   1 * NSEC_PER_MSEC);
 
-        dispatch_source_set_event_handler(timer, ^{
+        dispatch_source_set_event_handler(timer, ^{ 
             @autoreleasepool {
                 HideAllWindowsTest();
                 UpdateProteinRoot();
@@ -511,15 +342,8 @@ void _RenderSetup(void) {
 
     HOOK_INSTANCE_METHOD(NSClassFromString(@"CAWindowServerDisplay"), NSSelectorFromString(@"needsUpdate"), NeedsUpdateTrue, (IMP *)&_NeedsUpdateOrig);
 
-    // Hook mouse event processor
-    HOOK_INSTANCE_METHOD(
-        NSClassFromString(@"WSMouseEventProcessor"),
-        NSSelectorFromString(@"event_dispatch:annotationParams:dispatcher:"),
-        MouseEventDispatch_Hook,
-        (IMP *)&_MouseEventDispatch_Orig
-    );
-
-    NSLog(@"[Protein] Mouse event hook installed");
+    // Initialize mouse event handling
+    SetupMouseEvents();
 }
 
 Boolean setupAlready = false;
