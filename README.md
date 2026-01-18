@@ -1,58 +1,45 @@
-# fxwm
+# Basalt
 
-A low-level window manager experiment for macOS that hooks into the SkyLight compositor layer.
+A Work-In-Progress Desktop Environment for macOS.
 
-## What it does
+**⚠️ WARNING: EXTREMELY EXPERIMENTAL ⚠️**
+This project interacts with low-level macOS WindowServer components and modifies system launch configurations via temporary overlays.
 
-fxwm injects into the macOS WindowServer process and takes over rendering. It:
+## Overview
 
-- Stops all normal WindowServer rendering (windows, desktop, dock, etc.)
-- Preserves cursor rendering
-- Draws an animated 3D colored cube using Metal
+Basalt (internal name `fxwm`) is an experimental window manager and desktop environment renderer for macOS. It utilizes code injection to allow itself to render custom UI elements _directly on screen_ using Metal. 
 
-## Components
+## Current State
 
-- **fxwm** - The injector binary that sets up the dylib injection via tmpfs overlay
-- **libprotein_render.dylib** - Hooks SkyLight functions and implements custom Metal rendering
-- **metal_renderer** - Separated Metal rendering code (cube shader, 3D math, animation)
+- **Metal Renderer:** High-performance 2D rendering engine that replaces the compositor.
+- **Custom UI Framework:** Lightweight, retain-mode UI system supporting view hierarchies (`PVView`) and interactive controls (`PVButton`).
+- **Input Handling:** Processes mouse events for custom UI interaction (Hover, Click states).
+- **Text Rendering:** Custom bitmap font rendering engine.
+- **System Injection:** Uses `tmpfs` overlays to safely inject libraries into restricted system paths without permanent modification.
 
-## Building
+## Architecture
 
-Requires Nix with flakes enabled:
+- **`manager/`**: The core logic loaded into WindowServer. Contains the Metal renderer, UI framework, font engine, and event hooks.
+- **`src/`**: The bootstrap loader. Handles the read-write overlay creation and injection setup to override the system process.
+
+## Building and Running
+
+Prerequisites:
+- macOS (Apple Silicon/aarch64)
+- [Nix](https://nixos.org/download.html) with Flakes enabled.
+
+### Build
 
 ```bash
 nix build
 ```
 
-The build produces arm64e binaries (Apple Silicon with pointer authentication).
+### Run
 
-## Running
+To run the compositor injection (requires root privileges to mount overlays and restart WindowServer):
 
 ```bash
 nix run
 ```
 
-Or manually:
-
-```bash
-sudo ./result/bin/fxwm
-# Then `launchctl reboot userspace` to apply the WindowServer injection.
-```
-
-## Requirements
-
-- macOS on Apple Silicon (arm64e)
-- Xcode Command Line Tools
-- System Integrity Protection OFF (for WindowServer injection)
-
-## Technical Details
-
-- Uses [Dobby](https://github.com/jmpews/Dobby) for function hooking on arm64e
-- Resolves private symbols via dyld shared cache parsing
-- Hooks `CGXUpdateDisplay` to inject custom rendering 
-- Renders via `CAMetalLayer` on a root `CAContext` with a custom Metal pipeline
-- Uses tmpfs overlay on `/System/Library/LaunchDaemons` to inject `DYLD_INSERT_LIBRARIES`
-
-## License
-
-Research/experimental use only.
+*Note: This will restart your WindowServer, forcing a logout. Ensure you have saved all work before running.*
