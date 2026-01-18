@@ -41,13 +41,15 @@
           echo "System SDKROOT: $SYSROOT"
           export SDKROOT="$SYSROOT"
 
-          # Build with system cmake and clang
+          # Build with nix cmake and xcode clang
           mkdir -p build
-          cmake -S . -B build \
+          ${pkgsAarch64.cmake}/bin/cmake -S . -B build \
             -DCMAKE_OSX_ARCHITECTURES=arm64e \
             -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_OSX_SYSROOT="$SYSROOT"
-          cmake --build build -j$(sysctl -n hw.ncpu)
+            -DCMAKE_OSX_SYSROOT="$SYSROOT" \
+            -DCMAKE_C_COMPILER=$(xcrun -find clang) \
+            -DCMAKE_CXX_COMPILER=$(xcrun -find clang++)
+          ${pkgsAarch64.cmake}/bin/cmake --build build -j$(sysctl -n hw.ncpu)
         '';
         installPhase = ''
           mkdir -p $out/lib $out/include
