@@ -63,4 +63,26 @@
 
 - (void)handleKeyDown:(uint16_t)keyCode character:(char)character;
 
+
+
+@end
+
+
+
+@interface PVScrollView : PVView {
+
+    CGPoint _contentOffset;
+
+    CGSize _contentSize;
+
+}
+
+
+
+@property (nonatomic, assign) CGPoint contentOffset;
+
+@property (nonatomic, assign) CGSize contentSize;
+
+
+
 @end

@@ -86,35 +86,84 @@ Boolean DoLogon(const char* username, const char* password) {
     }
 }
 
-void CreateLogonView(PVView *gRootView) {
-    // Add a label
-    PVLabel *lbl = [[PVLabel alloc] init];
-    lbl.frame = CGRectMake(100, 220, 200, 30);
-    lbl.text = @"enter 501 passwd";
-    lbl.backgroundColor = 0x000000FF; // Black
-    lbl.textColor = 0xFFFFFFFF; // White
-    [gRootView addSubview:lbl];
+static NSString *gSelectedUsername = nil;
 
-    // Add a text field
+NSArray* GetUserList() {
+    NSMutableArray *users = [NSMutableArray array];
+    NSString *path = @"/var/db/dslocal/nodes/Default/users/";
+    NSError *error = nil;
+    NSArray *files = [[NSFileManager defaultManager] contentsOfDirectoryAtPath:path error:&error];
+    
+    if (error) {
+        NSLog(@"[Protein] Failed to read users directory: %@", error);
+        return @[@"bedtime"]; // Fallback
+    }
+    
+    for (NSString *file in files) {
+        if ([file hasSuffix:@".plist"] && ![file hasPrefix:@"_"]) {
+            NSString *username = [file stringByDeletingPathExtension];
+            [users addObject:username];
+        }
+    }
+    return users;
+}
+
+void CreateLogonView(PVView *gRootView) {
+    NSArray *users = GetUserList();
+    gSelectedUsername = [users firstObject];
+
+    // Add a label for instructions/status
+    PVLabel *statusLbl = [[PVLabel alloc] init];
+    statusLbl.frame = CGRectMake(800, 500, 400, 30);
+    statusLbl.text = [NSString stringWithFormat:@"Login as: %@", gSelectedUsername ?: @"none"];
+    statusLbl.backgroundColor = 0x00000000;
+    statusLbl.textColor = 0xFFFFFFFF;
+    [gRootView addSubview:statusLbl];
+
+    // Create ScrollView for User List
+    PVScrollView *sv = [[PVScrollView alloc] init];
+    sv.frame = CGRectMake(800, 100, 200, 350);
+    sv.backgroundColor = 0x222222FF;
+    sv.contentSize = CGSizeMake(200, users.count * 50);
+    [gRootView addSubview:sv];
+
+    for (int i = 0; i < users.count; i++) {
+        NSString *user = users[i];
+        PVButton *btn = [[PVButton alloc] init];
+        btn.frame = CGRectMake(5, i * 50 + 5, 190, 40);
+        btn.title = user;
+        btn.backgroundColor = 0x444444FF;
+        btn.onClick = ^{
+            gSelectedUsername = user;
+            statusLbl.text = [NSString stringWithFormat:@"Login as: %@", user];
+            statusLbl.textColor = 0xFFFFFFFF;
+        };
+        [sv addSubview:btn];
+    }
+
+    // Add a text field for password
     PVTextField *tf = [[PVTextField alloc] init];
-    tf.frame = CGRectMake(800, 600, 200, 40);
+    tf.frame = CGRectMake(800, 550, 200, 40);
     tf.placeholder = @"Type password...";
     tf.backgroundColor = 0x000000FF; // Black
     tf.textColor = 0xFFFFFFFF; // White
     tf.secureTextEntry = YES;
     tf.onEnter = ^(NSString *text) {
+        if (!gSelectedUsername) return;
+
         // Trim whitespace/newlines
         NSString *trimmedText = [text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 
-        NSLog(@"[Protein] Password Attempt Received (length: %lu)", (unsigned long)trimmedText.length);
+        NSLog(@"[Protein] Password Attempt for %@ (length: %lu)", gSelectedUsername, (unsigned long)trimmedText.length);
 
-        Boolean loginSucceded = DoLogon("bedtime", trimmedText.UTF8String);
+        Boolean loginSucceded = DoLogon(gSelectedUsername.UTF8String, trimmedText.UTF8String);
         if (loginSucceded) {
-            [lbl removeFromSuperview];
+            [statusLbl removeFromSuperview];
             [tf removeFromSuperview];
+            [sv removeFromSuperview];
         } else {
-            lbl.text = @"Login failed. Try again.";
-            lbl.textColor = 0xFF0000FF; // Red
+            statusLbl.text = @"Login failed. Try again.";
+            statusLbl.textColor = 0xFF0000FF; // Red
             tf.text = @""; // Clear password on failure
         }
     };

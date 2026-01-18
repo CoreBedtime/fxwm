@@ -197,3 +197,20 @@
 }
 
 @end
+
+@implementation PVScrollView
+
+@synthesize contentOffset = _contentOffset;
+@synthesize contentSize = _contentSize;
+
+- (instancetype)init {
+    self = [super init];
+    if (self) {
+        _contentOffset = CGPointZero;
+        _contentSize = CGSizeZero;
+        self.backgroundColor = 0x00000000; // Transparent by default
+    }
+    return self;
+}
+
+@end

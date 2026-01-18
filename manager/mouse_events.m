@@ -54,6 +54,11 @@ typedef struct __attribute__((packed)) SLSEventRecord {
             uint8_t clickState;      // +144 (-1=down, 0=up)
             uint8_t buttonNumber;    // +145 (0=left, 1=right, 2+=other)
         } mouse;
+        struct {
+            uint8_t padding[32];     // +120 to +152
+            double deltaY;           // +152
+            double deltaX;           // +160
+        } scroll;
         uint8_t rawData[80];
     } eventData;
 
@@ -145,6 +150,7 @@ static void ProcessMouseEvent(SLSEventRecord *event) {
         case kCGSEventOtherMouseDown:
         case kCGSEventOtherMouseUp:
         case kCGSEventOtherMouseDragged:
+        case kCGSEventScrollWheel:
             break;
         default:
             return; // Not a mouse event
@@ -158,19 +164,30 @@ static void ProcessMouseEvent(SLSEventRecord *event) {
     }
 
     CGPoint windowLocation = ProteinScreenToWindow(screenLocation);
-    int buttonNumber = event->eventData.mouse.buttonNumber;
-    int clickCount = event->eventData.mouse.clickCount;
+    int buttonNumber = 0;
+    int clickCount = 0;
+    double deltaX = 0;
+    double deltaY = 0;
 
-    NSLog(@"[Protein] Mouse event: %s at screen(%.1f, %.1f) window(%.1f, %.1f) button=%d clicks=%d",
+    if (eventType == kCGSEventScrollWheel) {
+        deltaX = event->eventData.scroll.deltaX;
+        deltaY = event->eventData.scroll.deltaY;
+    } else {
+        buttonNumber = event->eventData.mouse.buttonNumber;
+        clickCount = event->eventData.mouse.clickCount;
+    }
+
+    NSLog(@"[Protein] Mouse event: %s at screen(%.1f, %.1f) window(%.1f, %.1f) button=%d clicks=%d deltas=(%.1f, %.1f)",
           EventTypeName(eventType),
           screenLocation.x, screenLocation.y,
           windowLocation.x, windowLocation.y,
-          buttonNumber, clickCount);
+          buttonNumber, clickCount,
+          deltaX, deltaY);
 
     // Call the registered callback if any
     if (gMouseEventCallback) {
         gMouseEventCallback(eventType, screenLocation, windowLocation,
-                           buttonNumber, clickCount, gMouseEventUserInfo);
+                           buttonNumber, clickCount, deltaX, deltaY, gMouseEventUserInfo);
     }
 }
 

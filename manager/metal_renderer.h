@@ -15,4 +15,7 @@ void MetalRendererRender(PVView *rootView, CALayer *layer);
 // Updates view state based on mouse interaction (hover, click)
 void MetalRendererHandleMouse(PVView *rootView, CGPoint position, bool isDown);
 
+// Updates scroll views based on scroll wheel interaction
+void MetalRendererHandleScroll(PVView *rootView, CGPoint position, double deltaX, double deltaY);
+
 #endif /* metal_renderer_h */

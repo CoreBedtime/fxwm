@@ -56,6 +56,8 @@ typedef void (*MouseEventCallback)(
     CGPoint windowLocation,
     int buttonNumber,
     int clickCount,
+    double deltaX,
+    double deltaY,
     void *userInfo
 );
 

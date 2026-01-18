@@ -1,4 +1,5 @@
 #include <Foundation/Foundation.h>
+#include <Foundation/NSObjCRuntime.h>
 #include <QuartzCore/QuartzCore.h>
 #include <dispatch/dispatch.h>
 #include <stdbool.h>
@@ -260,9 +261,16 @@ static void ProteinMouseHandler(
     CGPoint windowLocation,
     int buttonNumber,
     int clickCount,
+    double deltaX,
+    double deltaY,
     void *userInfo)
 {
     if (!gRootView) return;
+
+    if (eventType == kCGSEventScrollWheel) {
+        MetalRendererHandleScroll(gRootView, windowLocation, deltaX, deltaY);
+        return;
+    }
 
     bool isDown = false;
     switch (eventType) {
@@ -296,7 +304,7 @@ static void ProteinMouseHandler(
 }
 
 void UpdateProteinRoot(void) {
-    CGRect _updateRect = CGRectMake(0, 0, 1800, 1169);
+    CGRect _updateRect = gWindowRootBounds;
     gWindowRootBounds = _updateRect; // Update bounds for hit testing
     CFTypeRef Region = CGRegionCreateWithRect(_updateRect);
     if (gWindowRoot == NULL) {
@@ -396,6 +404,8 @@ void _RenderSetup(void) {
 
     HOOK_INSTANCE_METHOD(NSClassFromString(@"CAWindowServerDisplay"), NSSelectorFromString(@"needsUpdate"), NeedsUpdateTrue, (IMP *)&_NeedsUpdateOrig);
 
+    gWindowRootBounds = [[NSClassFromString(@"CADisplay") mainDisplay] bounds];
+
     // Initialize mouse event handling
     SetupMouseEvents();
     ProteinSetMouseEventCallback(ProteinMouseHandler, NULL);
@@ -403,7 +413,7 @@ void _RenderSetup(void) {
 
     // Setup View Hierarchy
     gRootView = [[PVView alloc] init];
-    gRootView.frame = CGRectMake(0, 0, 1800, 1169); // Match window bounds for now
+    gRootView.frame = gWindowRootBounds;
     gRootView.backgroundColor = 0x1A1A1AFF; // Dark grey
 
 

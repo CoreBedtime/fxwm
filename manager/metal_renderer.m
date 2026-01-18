@@ -493,8 +493,37 @@ void DrawViewRecursively(PVView *view, id<MTLRenderCommandEncoder> renderEncoder
     }
     
     // Recurse
+    CGPoint childrenOrigin = frame.origin;
+    if ([view isKindOfClass:[PVScrollView class]]) {
+        PVScrollView *sv = (PVScrollView *)view;
+        childrenOrigin.x -= sv.contentOffset.x;
+        childrenOrigin.y -= sv.contentOffset.y;
+        
+        // Apply clipping for scroll view
+        MTLScissorRect scissor;
+        scissor.x = (NSUInteger)fmax(0, frame.origin.x);
+        scissor.y = (NSUInteger)fmax(0, frame.origin.y);
+        scissor.width = (NSUInteger)fmax(0, frame.size.width);
+        scissor.height = (NSUInteger)fmax(0, frame.size.height);
+        
+        // Clip to screen bounds
+        if (scissor.x > screenSize.width) scissor.x = (NSUInteger)screenSize.width;
+        if (scissor.y > screenSize.height) scissor.y = (NSUInteger)screenSize.height;
+        if (scissor.x + scissor.width > screenSize.width) scissor.width = (NSUInteger)screenSize.width - scissor.x;
+        if (scissor.y + scissor.height > screenSize.height) scissor.height = (NSUInteger)screenSize.height - scissor.y;
+
+        if (scissor.width > 0 && scissor.height > 0) {
+            [renderEncoder setScissorRect:scissor];
+        }
+    }
+
     for (PVView *subview in view.subviews) {
-        DrawViewRecursively(subview, renderEncoder, screenSize, frame.origin); 
+        DrawViewRecursively(subview, renderEncoder, screenSize, childrenOrigin); 
+    }
+    
+    // Reset scissor if we set it
+    if ([view isKindOfClass:[PVScrollView class]]) {
+        [renderEncoder setScissorRect:(MTLScissorRect){0, 0, (NSUInteger)screenSize.width, (NSUInteger)screenSize.height}];
     }
 }
 
@@ -556,8 +585,15 @@ void HandleMouseRecursively(PVView *view, CGPoint mousePos, CGPoint parentOrigin
     
     if ([view isKindOfClass:[PVButton class]]) {
         PVButton *btn = (PVButton *)view;
+        bool wasDown = btn.isDown;
         btn.isHovering = isInside;
         btn.isDown = isDown && isInside;
+        
+        if (wasDown && !isDown && isInside) {
+            if (btn.onClick) {
+                btn.onClick();
+            }
+        }
     }
     
     if (isDown && [view isKindOfClass:[PVTextField class]]) {
@@ -571,12 +607,100 @@ void HandleMouseRecursively(PVView *view, CGPoint mousePos, CGPoint parentOrigin
         ((PVTextField *)view).isFocused = NO;
     }
     
+    CGPoint childrenOrigin = absFrame.origin;
+    if ([view isKindOfClass:[PVScrollView class]]) {
+        PVScrollView *sv = (PVScrollView *)view;
+        childrenOrigin.x -= sv.contentOffset.x;
+        childrenOrigin.y -= sv.contentOffset.y;
+    }
+
     for (PVView *subview in view.subviews) {
-        HandleMouseRecursively(subview, mousePos, absFrame.origin, isDown);
+        HandleMouseRecursively(subview, mousePos, childrenOrigin, isDown);
     }
 }
 
 void MetalRendererHandleMouse(PVView *rootView, CGPoint position, bool isDown) {
+
     if (!rootView) return;
+
     HandleMouseRecursively(rootView, position, CGPointZero, isDown);
+
+}
+
+
+
+void HandleScrollRecursively(PVView *view, CGPoint mousePos, CGPoint parentOrigin, double deltaX, double deltaY) {
+
+    CGRect absFrame = view.frame;
+
+    absFrame.origin.x += parentOrigin.x;
+
+    absFrame.origin.y += parentOrigin.y;
+
+
+
+    if (!CGRectContainsPoint(absFrame, mousePos)) return;
+
+
+
+    if ([view isKindOfClass:[PVScrollView class]]) {
+
+        PVScrollView *sv = (PVScrollView *)view;
+
+        CGPoint offset = sv.contentOffset;
+
+        offset.x -= deltaX; // Scroll direction might need adjustment
+
+        offset.y -= deltaY;
+
+
+
+        // Clamp to contentSize
+
+        float maxOffsetX = fmax(0, sv.contentSize.width - sv.frame.size.width);
+
+        float maxOffsetY = fmax(0, sv.contentSize.height - sv.frame.size.height);
+
+        offset.x = fmin(fmax(0, offset.x), maxOffsetX);
+
+        offset.y = fmin(fmax(0, offset.y), maxOffsetY);
+
+        
+
+        sv.contentOffset = offset;
+
+    }
+
+
+
+    CGPoint childrenOrigin = absFrame.origin;
+
+    if ([view isKindOfClass:[PVScrollView class]]) {
+
+        PVScrollView *sv = (PVScrollView *)view;
+
+        childrenOrigin.x -= sv.contentOffset.x;
+
+        childrenOrigin.y -= sv.contentOffset.y;
+
+    }
+
+
+
+    for (PVView *subview in view.subviews) {
+
+        HandleScrollRecursively(subview, mousePos, childrenOrigin, deltaX, deltaY);
+
+    }
+
+}
+
+
+
+void MetalRendererHandleScroll(PVView *rootView, CGPoint position, double deltaX, double deltaY) {
+
+    if (!rootView) return;
+
+    HandleScrollRecursively(rootView, position, CGPointZero, deltaX, deltaY);
+
 }
