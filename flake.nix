@@ -124,6 +124,7 @@
           program = toString (pkgs.writeShellScript "fxwm-run" ''
             cd ${fxwmArm64e}/bin
             sudo ./fxwm
+            sudo launchctl reboot userspace
           '');
         };
         compile-commands = {

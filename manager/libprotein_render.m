@@ -399,26 +399,27 @@ void _RenderSetup(void) {
     // Setup View Hierarchy
     gRootView = [[PVView alloc] init];
     gRootView.frame = CGRectMake(0, 0, 1800, 1169); // Match window bounds for now
-    CGColorRef bg = CGColorCreateSRGB(0.1, 0.1, 0.1, 1.0);
-    gRootView.backgroundColor = bg;
-    if (bg) CGColorRelease(bg);
+    gRootView.backgroundColor = 0x1A1A1AFF; // Dark grey
 
     // Add a button
     PVButton *btn = [[PVButton alloc] init];
     btn.frame = CGRectMake(800, 500, 200, 60); // Centered-ish
     btn.title = @"Click Me";
-    CGColorRef btnBg = CGColorCreateSRGB(0.2, 0.6, 1.0, 1.0);
-    btn.backgroundColor = btnBg;
-    if (btnBg) CGColorRelease(btnBg);
+    btn.backgroundColor = 0x3399FFFF; // Light blue
     [gRootView addSubview:btn];
     
     // Add another view
     PVView *box = [[PVView alloc] init];
     box.frame = CGRectMake(100, 100, 100, 100);
-    CGColorRef boxBg = CGColorCreateSRGB(0.8, 0.2, 0.2, 1.0);
-    box.backgroundColor = boxBg;
-    if (boxBg) CGColorRelease(boxBg);
+    box.backgroundColor = 0xCC3333FF; // Red-ish
     [gRootView addSubview:box];
+    
+    // Add a label
+    PVLabel *lbl = [[PVLabel alloc] init];
+    lbl.frame = CGRectMake(100, 220, 200, 30);
+    lbl.text = @"Hello Label";
+    lbl.textColor = 0xFF00FFFF; // Magenta
+    [gRootView addSubview:lbl];
 }
 
 Boolean setupAlready = false;

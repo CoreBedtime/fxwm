@@ -13,31 +13,38 @@
     self = [super init];
     if (self) {
         _internalSubviews = [[NSMutableArray alloc] init];
-        _backgroundColor = CGColorGetConstantColor(kCGColorWhite);
-        if (_backgroundColor) CGColorRetain(_backgroundColor);
+        _backgroundColor = 0xFFFFFFFF; // White
+        _onRender = nil;
     }
     return self;
 }
 
 - (void)dealloc {
     [_internalSubviews release];
-    if (_backgroundColor) CGColorRelease(_backgroundColor);
+    if (_onRender) [ (id)_onRender release];
     [super dealloc];
+}
+
+- (void)setOnRender:(void (^)(PVView *))onRender {
+    if (_onRender != onRender) {
+        if (_onRender) [ (id)_onRender release];
+        _onRender = [onRender copy];
+    }
+}
+
+- (void (^)(PVView *))onRender {
+    return _onRender;
 }
 
 - (NSArray *)subviews {
     return _internalSubviews;
 }
 
-- (void)setBackgroundColor:(CGColorRef)backgroundColor {
-    if (_backgroundColor != backgroundColor) {
-        if (_backgroundColor) CGColorRelease(_backgroundColor);
-        _backgroundColor = backgroundColor;
-        if (_backgroundColor) CGColorRetain(_backgroundColor);
-    }
+- (void)setBackgroundColor:(uint32_t)backgroundColor {
+    _backgroundColor = backgroundColor;
 }
 
-- (CGColorRef)backgroundColor {
+- (uint32_t)backgroundColor {
     return _backgroundColor;
 }
 
@@ -63,17 +70,48 @@
 
 @end
 
+@implementation PVLabel
+
+@synthesize textColor = _textColor;
+
+- (instancetype)init {
+    self = [super init];
+    if (self) {
+        _textColor = 0xFFFFFFFF; // White default
+        self.backgroundColor = 0x00000000; // Clear
+    }
+    return self;
+}
+
+- (void)dealloc {
+    [_text release];
+    [super dealloc];
+}
+
+- (void)setText:(NSString *)text {
+    if (_text != text) {
+        [_text release];
+        _text = [text copy];
+    }
+}
+
+- (NSString *)text {
+    return _text;
+}
+
+@end
+
 @implementation PVButton
 
+@synthesize textColor = _textColor;
 @synthesize isHovering = _isHovering;
 @synthesize isDown = _isDown;
 
 - (instancetype)init {
     self = [super init];
     if (self) {
-        CGColorRef color = CGColorCreateSRGB(0.0, 0.47, 0.84, 1.0);
-        self.backgroundColor = color;
-        if (color) CGColorRelease(color);
+        _textColor = 0xFFFFFFFF; // White default
+        self.backgroundColor = 0x0078D7FF; // Blue
     }
     return self;
 }

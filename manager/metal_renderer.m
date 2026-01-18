@@ -83,7 +83,7 @@ void MetalRendererInit(void) {
         "};\n"
         "struct TextVertexOut {\n"
         "    float4 position [[position]];\n"
-        "    float2 texCoord;\n"
+        "    float2 texCoord [[user(texcoord)]];\n"
         "};\n"
         // Text Vertex Shader
         "vertex TextVertexOut vertex_text(TextVertexIn in [[stage_in]],\n"
@@ -304,6 +304,7 @@ void DrawText(id<MTLRenderCommandEncoder> renderEncoder, NSString *text, CGPoint
     uniforms.color[3] = a;
     
     [renderEncoder setVertexBytes:&uniforms length:sizeof(Uniforms) atIndex:1];
+    [renderEncoder setFragmentBytes:&uniforms length:sizeof(Uniforms) atIndex:1];
     
     // Draw
     [renderEncoder setVertexBytes:vertices length:sizeof(TextVertex) * len * 6 atIndex:0];
@@ -318,6 +319,10 @@ void DrawText(id<MTLRenderCommandEncoder> renderEncoder, NSString *text, CGPoint
 
 void DrawViewRecursively(PVView *view, id<MTLRenderCommandEncoder> renderEncoder, CGSize screenSize, CGPoint parentOrigin) {
     if (screenSize.width <= 0 || screenSize.height <= 0) return;
+
+    if (view.onRender) {
+        view.onRender(view);
+    }
 
     // Calculate Absolute Frame
     CGRect frame = view.frame;
@@ -342,17 +347,11 @@ void DrawViewRecursively(PVView *view, id<MTLRenderCommandEncoder> renderEncoder
     uniforms.offset[1] = ndcY;
     
     // Color
-    const CGFloat *components = CGColorGetComponents(view.backgroundColor);
-    size_t numComponents = CGColorGetNumberOfComponents(view.backgroundColor);
-    
-    float r = 1, g = 1, b = 1, a = 1;
-    if (numComponents >= 3) {
-        r = components[0]; g = components[1]; b = components[2];
-        if (numComponents >= 4) a = components[3];
-    } else if (numComponents >= 1) {
-        r = g = b = components[0];
-        if (numComponents >= 2) a = components[1];
-    }
+    uint32_t bg = view.backgroundColor;
+    float r = ((bg >> 24) & 0xFF) / 255.0f;
+    float g = ((bg >> 16) & 0xFF) / 255.0f;
+    float b = ((bg >> 8) & 0xFF) / 255.0f;
+    float a = (bg & 0xFF) / 255.0f;
     
     if ([view isKindOfClass:[PVButton class]]) {
         PVButton *btn = (PVButton *)view;
@@ -372,19 +371,32 @@ void DrawViewRecursively(PVView *view, id<MTLRenderCommandEncoder> renderEncoder
     [renderEncoder setVertexBytes:&uniforms length:sizeof(Uniforms) atIndex:1];
     [renderEncoder drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:6];
     
-    // Draw Text if PVButton
+    // Draw Text
+    NSString *text = nil;
+    uint32_t color = 0xFFFFFFFF;
+    
     if ([view isKindOfClass:[PVButton class]]) {
-        PVButton *btn = (PVButton *)view;
-        if (btn.title && btn.title.length > 0) {
-            // Center text
-            float textW = btn.title.length * 8.0f;
-            float textH = 16.0f;
-            
-            float tx = frame.origin.x + (frame.size.width - textW) / 2.0f;
-            float ty = frame.origin.y + (frame.size.height - textH) / 2.0f;
-            
-            DrawText(renderEncoder, btn.title, CGPointMake(tx, ty), screenSize, 1.0, 1.0, 1.0, 1.0);
-        }
+        text = ((PVButton *)view).title;
+        color = ((PVButton *)view).textColor;
+    } else if ([view isKindOfClass:[PVLabel class]]) {
+        text = ((PVLabel *)view).text;
+        color = ((PVLabel *)view).textColor;
+    }
+    
+    if (text && text.length > 0) {
+        float r = ((color >> 24) & 0xFF) / 255.0f;
+        float g = ((color >> 16) & 0xFF) / 255.0f;
+        float b = ((color >> 8) & 0xFF) / 255.0f;
+        float a = (color & 0xFF) / 255.0f;
+        
+        // Center text
+        float textW = text.length * 8.0f;
+        float textH = 16.0f;
+        
+        float tx = frame.origin.x + (frame.size.width - textW) / 2.0f;
+        float ty = frame.origin.y + (frame.size.height - textH) / 2.0f;
+        
+        DrawText(renderEncoder, text, CGPointMake(tx, ty), screenSize, r, g, b, a);
     }
     
     // Recurse
