@@ -406,6 +406,7 @@ void _RenderSetup(void) {
     // Add a button
     PVButton *btn = [[PVButton alloc] init];
     btn.frame = CGRectMake(800, 500, 200, 60); // Centered-ish
+    btn.title = @"Click Me";
     CGColorRef btnBg = CGColorCreateSRGB(0.2, 0.6, 1.0, 1.0);
     btn.backgroundColor = btnBg;
     if (btnBg) CGColorRelease(btnBg);
