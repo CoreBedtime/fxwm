@@ -20,9 +20,9 @@ static NSMutableArray *gDesktopItems = nil;
 static PVView *gDesktopContainer = nil;
 
 // Get desktop items from user's Desktop folder
-NSArray* GetDesktopItems() {
+NSArray* GetDesktopItems(char *username) {
     NSMutableArray *items = [NSMutableArray array];
-    NSString *desktopPath = @"/Users/bedtime/Desktop";
+    NSString *desktopPath = [NSString stringWithFormat:@"/Users/%s/Desktop", username];
 
     if (!desktopPath) {
         NSLog(@"[Protein] Could not find Desktop directory");
@@ -75,7 +75,7 @@ void HandleDesktopItemClick(DesktopItem *item) {
 
 void CreateDesktopView(PVView *gRootView, char * username) {
     // Initialize desktop items array
-    gDesktopItems = [GetDesktopItems mutableCopy];
+    gDesktopItems = [GetDesktopItems(username) mutableCopy];
 
     // Create desktop container view
     gDesktopContainer = [[PVView alloc] init];
