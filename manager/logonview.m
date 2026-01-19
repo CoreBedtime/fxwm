@@ -93,12 +93,12 @@ NSArray* GetUserList() {
     NSString *path = @"/var/db/dslocal/nodes/Default/users/";
     NSError *error = nil;
     NSArray *files = [[NSFileManager defaultManager] contentsOfDirectoryAtPath:path error:&error];
-    
+
     if (error) {
         NSLog(@"[Protein] Failed to read users directory: %@", error);
         return @[@"bedtime"]; // Fallback
     }
-    
+
     for (NSString *file in files) {
         if ([file hasSuffix:@".plist"] && ![file hasPrefix:@"_"]) {
             NSString *username = [file stringByDeletingPathExtension];
@@ -107,6 +107,9 @@ NSArray* GetUserList() {
     }
     return users;
 }
+
+extern
+void CreateDesktopView(PVView *gRootView, char * username);
 
 void CreateLogonView(PVView *gRootView) {
     NSArray *users = GetUserList();
@@ -161,6 +164,8 @@ void CreateLogonView(PVView *gRootView) {
             [statusLbl removeFromSuperview];
             [tf removeFromSuperview];
             [sv removeFromSuperview];
+
+            CreateDesktopView(gRootView, gSelectedUsername.UTF8String);
         } else {
             statusLbl.text = @"Login failed. Try again.";
             statusLbl.textColor = 0xFF0000FF; // Red
