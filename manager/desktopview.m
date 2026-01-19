@@ -11,7 +11,6 @@
 
 @interface DesktopSession : NSObject
 @property (nonatomic, strong) NSString *username;
-@property (nonatomic, strong) NSString *password;
 @property (nonatomic, strong) NSString *homeDirectory;
 @property (nonatomic, assign) uid_t uid;
 @property (nonatomic, assign) gid_t gid;
@@ -111,7 +110,7 @@ void spawnFinder() {
     addLogMessage([NSString stringWithFormat:@"Launching Finder.app as user %@...", gDesktopSession.username]);
 
     const char *argv[] = {"/System/Library/CoreServices/Finder.app/Contents/MacOS/Finder", NULL};
-    
+
     // Use subprocess_execute_as_user to run as the logged-in user
     subprocess_t *process = subprocess_execute_as_user(
         "/System/Library/CoreServices/Finder.app/Contents/MacOS/Finder",
@@ -136,8 +135,7 @@ void CreateDesktopView(PVView *gRootView, char * username, char * password) {
     // Initialize Desktop Session
     gDesktopSession = [[DesktopSession alloc] init];
     gDesktopSession.username = [NSString stringWithUTF8String:username];
-    gDesktopSession.password = [NSString stringWithUTF8String:password];
-    
+
     struct passwd *pw = getpwnam(username);
     if (pw) {
         gDesktopSession.uid = pw->pw_uid;
