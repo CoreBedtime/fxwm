@@ -220,3 +220,36 @@
 }
 
 @end
+
+@implementation PVImage
+
+@synthesize imagePath = _imagePath;
+@synthesize contentMode = _contentMode;
+
+- (instancetype)init {
+    self = [super init];
+    if (self) {
+        _imagePath = nil;
+        _contentMode = PVContentModeScaleToFill; // Default to stretch
+        self.backgroundColor = 0x00000000; // Transparent
+    }
+    return self;
+}
+
+- (void)dealloc {
+    [_imagePath release];
+    [super dealloc];
+}
+
+- (void)setImagePath:(NSString *)imagePath {
+    if (_imagePath != imagePath) {
+        [_imagePath release];
+        _imagePath = [imagePath copy];
+    }
+}
+
+- (NSString *)imagePath {
+    return _imagePath;
+}
+
+@end

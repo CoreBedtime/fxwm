@@ -88,3 +88,39 @@
 
 
 @end
+
+
+
+typedef enum {
+
+    PVContentModeScaleToFill,      // Stretch
+
+    PVContentModeScaleAspectFit,   // Aspect Fit
+
+    PVContentModeScaleAspectFill,  // Aspect Fill
+
+    PVContentModeTile              // Tile
+
+} PVContentMode;
+
+
+
+@interface PVImage : PVView {
+
+    NSString *_imagePath;
+
+    PVContentMode _contentMode;
+
+}
+
+
+
+@property (nonatomic, copy) NSString *imagePath;
+
+@property (nonatomic, assign) PVContentMode contentMode;
+
+
+
+@end
+
+

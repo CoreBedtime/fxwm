@@ -145,9 +145,16 @@ void CreateDesktopView(PVView *gRootView, char * username, char * password) {
 
     // Create desktop container view
     gDesktopContainer = [[PVView alloc] init];
-    gDesktopContainer.frame = CGRectMake(0, 0, 1920, 1080); // Full screen
+    gDesktopContainer.frame = gRootView.frame;
     gDesktopContainer.backgroundColor = 0x018281FF; // Blue background
     [gRootView addSubview:gDesktopContainer];
+
+    // Add Wallpaper
+    PVImage *wallpaper = [[PVImage alloc] init];
+    wallpaper.frame = gRootView.frame;
+    wallpaper.imagePath = @"/private/var/protein/wallpaper.png";
+    wallpaper.contentMode = PVContentModeTile;
+    [gDesktopContainer addSubview:wallpaper];
 
     // Create log view on the right side
     gLogScrollView = [[PVScrollView alloc] init];

@@ -80,7 +80,7 @@
             -I${dobbyArm64e}/include \
             -L${dobbyArm64e}/lib -ldobby \
             -framework Foundation -framework IOSurface -framework CoreGraphics -framework QuartzCore \
-            -framework Metal -framework CoreServices \
+            -framework Metal -framework CoreServices -framework ImageIO \
             -lc++ \
             libprotein_render.m logonview.m mouse_events.m \
             keyboard_events.m metal_renderer.m ui.m desktopview.m \

@@ -6,6 +6,7 @@
 #import <QuartzCore/QuartzCore.h>
 #import <Metal/Metal.h>
 #import <CoreGraphics/CoreGraphics.h>
+#import <ImageIO/ImageIO.h>
 #include <math.h>
 
 #import "metal_renderer.h"
@@ -28,9 +29,11 @@ static id<MTLDevice> gMetalDevice = nil;
 static id<MTLCommandQueue> gMetalCommandQueue = nil;
 static id<MTLRenderPipelineState> gMetalPipeline = nil;     // For solid color quads
 static id<MTLRenderPipelineState> gMetalTextPipeline = nil; // For text
+static id<MTLRenderPipelineState> gMetalTexturePipeline = nil; // For generic textures
 static id<MTLBuffer> gMetalVertexBuffer = nil;              // For solid color quads (shared)
 static id<MTLTexture> gMetalFontTexture = nil;
 static CAMetalLayer *gMetalSublayer = nil;
+static NSMutableDictionary *gTextureCache = nil;
 
 void MetalRendererInit(void) {
     if (gMetalDevice) return;
@@ -102,6 +105,14 @@ void MetalRendererInit(void) {
         "    float alpha = fontTexture.sample(textureSampler, in.texCoord).r;\n"
         "    if (alpha < 0.5) discard_fragment();\n"
         "    return float4(uniforms.color.rgb, uniforms.color.a * alpha);\n"
+        "}\n"
+        // Texture Fragment Shader
+        "fragment float4 fragment_texture(TextVertexOut in [[stage_in]],\n"
+        "                                 texture2d<float> texture [[texture(0)]],\n"
+        "                                 constant Uniforms &uniforms [[buffer(1)]]) {\n"
+        "    constexpr sampler textureSampler (mag_filter::linear, min_filter::linear, s_address::repeat, t_address::repeat);\n"
+        "    float4 color = texture.sample(textureSampler, in.texCoord);\n"
+        "    return color * uniforms.color;\n"
         "}\n";
 
     NSError *error = nil;
@@ -179,6 +190,28 @@ void MetalRendererInit(void) {
         NSLog(@"Failed to create Metal text pipeline: %@", error);
         return;
     }
+
+    // ------------------------------------------------------------------------
+    // Texture Pipeline
+    // ------------------------------------------------------------------------
+    id<MTLFunction> textureFragmentFn = [library newFunctionWithName:@"fragment_texture"];
+    
+    MTLRenderPipelineDescriptor *texturePipelineDesc = [[MTLRenderPipelineDescriptor alloc] init];
+    texturePipelineDesc.vertexFunction = textVertexFn; // Reuse vertex shader
+    texturePipelineDesc.fragmentFunction = textureFragmentFn;
+    texturePipelineDesc.vertexDescriptor = textVertexDesc; // Reuse vertex descriptor
+    texturePipelineDesc.colorAttachments[0].pixelFormat = MTLPixelFormatBGRA8Unorm;
+    texturePipelineDesc.colorAttachments[0].blendingEnabled = YES;
+    texturePipelineDesc.colorAttachments[0].rgbBlendOperation = MTLBlendOperationAdd;
+    texturePipelineDesc.colorAttachments[0].sourceRGBBlendFactor = MTLBlendFactorSourceAlpha;
+    texturePipelineDesc.colorAttachments[0].destinationRGBBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
+    
+    gMetalTexturePipeline = [gMetalDevice newRenderPipelineStateWithDescriptor:texturePipelineDesc error:&error];
+    if (error) {
+        NSLog(@"Failed to create Metal texture pipeline: %@", error);
+        return;
+    }
+
     
     // ------------------------------------------------------------------------
     // Font Texture
@@ -213,6 +246,56 @@ void MetalRendererInit(void) {
     NSLog(@"Metal Renderer initialized");
 }
 
+id<MTLTexture> LoadTexture(NSString *path) {
+    if (!path) return nil;
+    if (!gTextureCache) gTextureCache = [[NSMutableDictionary alloc] init];
+    if (gTextureCache[path]) return gTextureCache[path];
+    
+    NSURL *url = [NSURL fileURLWithPath:path];
+    CGImageSourceRef source = CGImageSourceCreateWithURL((__bridge CFURLRef)url, NULL);
+    if (!source) return nil;
+    CGImageRef image = CGImageSourceCreateImageAtIndex(source, 0, NULL);
+    CFRelease(source);
+    if (!image) return nil;
+    
+    size_t width = CGImageGetWidth(image);
+    size_t height = CGImageGetHeight(image);
+    
+    MTLTextureDescriptor *textureDescriptor = [[MTLTextureDescriptor alloc] init];
+    textureDescriptor.pixelFormat = MTLPixelFormatRGBA8Unorm;
+    textureDescriptor.width = width;
+    textureDescriptor.height = height;
+    id<MTLTexture> texture = [gMetalDevice newTextureWithDescriptor:textureDescriptor];
+    [textureDescriptor release];
+    
+    CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
+    CGContextRef context = CGBitmapContextCreate(NULL, width, height, 8, 4 * width, colorSpace, kCGImageAlphaPremultipliedLast | kCGBitmapByteOrder32Big);
+    CGColorSpaceRelease(colorSpace);
+    
+    if (!context) {
+        CGImageRelease(image);
+        return nil;
+    }
+    
+    // Draw image to bitmap context
+    // Core Graphics coordinate system (quadrant I) vs Metal (quadrant IV for textures usually? or depends on sampling).
+    // Usually images load upside down if not flipped?
+    // Let's try drawing as is. If flipped, we flip Y in context or UVs.
+    // Standard CGContextDrawImage draws from bottom-left.
+    // But we are creating a context.
+    
+    CGContextDrawImage(context, CGRectMake(0, 0, width, height), image);
+    CGImageRelease(image);
+    
+    void *data = CGBitmapContextGetData(context);
+    [texture replaceRegion:MTLRegionMake2D(0, 0, width, height) mipmapLevel:0 withBytes:data bytesPerRow:4 * width];
+    
+    CGContextRelease(context);
+    
+    gTextureCache[path] = texture;
+    return texture;
+}
+
 // Draw text string at specific location
 void DrawText(id<MTLRenderCommandEncoder> renderEncoder, NSString *text, CGPoint origin, CGSize screenSize, float r, float g, float b, float a) {
     if (!text || text.length == 0) return;
@@ -239,41 +322,8 @@ void DrawText(id<MTLRenderCommandEncoder> renderEncoder, NSString *text, CGPoint
         float v0 = 0.0f;
         float v1 = 1.0f;
         
-        // Pos relative to origin (top-left)
-        // Vertices: BL, BR, TL, BR, TR, TL
-        // Metal Y: up is positive?
-        // Wait, in my vertex shader, I use uniforms.offset to position.
-        // My uniform setup logic in DrawViewRecursively maps input frame to NDC.
-        // If I reuse that logic here, I can pass text position as relative to window.
-        
-        // Let's create vertices in "pixels relative to start of string"
-        // And then apply uniforms for the whole string block.
-        // Or better: generate vertices in "pixels relative to view/window".
-        
         float px = x + origin.x;
         float py = y + origin.y;
-        
-        // In my current setup (DrawViewRecursively):
-        // Frame origin Y is top-left.
-        // NDC Y is calculated as: 1.0 - (centerY / screenH) * 2.0.
-        // This implies screen coordinate 0 is top.
-        
-        // Vertices (x, y)
-        // BL: px, py + h
-        // BR: px + w, py + h
-        // TL: px, py
-        // TR: px + w, py
-        
-        // Note on NDC:
-        // If I pass these pixel coords to shader, I need to know how shader interprets them.
-        // Shader: pos * scale + offset.
-        // If I set scale to (2/w, -2/h) and offset to (-1, 1), then pixels (0,0) -> (-1, 1) (TL).
-        // Pixels (w, h) -> (1, -1) (BR).
-        
-        // Let's configure uniforms for "Pixel Coordinates" once for the text draw call.
-        // Scale = (2.0 / ScreenW, -2.0 / ScreenH)
-        // Offset = (-1.0, 1.0)
-        // Input Vertex Position = Absolute Pixel Position (x, y).
         
         // Triangle 1
         vertices[vIndex++] = (TextVertex){{px, py + h},      {u0, v1}}; // BL
@@ -370,6 +420,98 @@ void DrawViewRecursively(PVView *view, id<MTLRenderCommandEncoder> renderEncoder
     
     [renderEncoder setVertexBytes:&uniforms length:sizeof(Uniforms) atIndex:1];
     [renderEncoder drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:6];
+    
+    // Draw Image
+    if ([view isKindOfClass:[PVImage class]]) {
+        PVImage *imgView = (PVImage *)view;
+        if (imgView.imagePath) {
+            id<MTLTexture> texture = LoadTexture(imgView.imagePath);
+            if (texture) {
+                // Calculate Geometry & UVs
+                float viewW = frame.size.width;
+                float viewH = frame.size.height;
+                float texW = (float)texture.width;
+                float texH = (float)texture.height;
+                
+                float drawX = frame.origin.x;
+                float drawY = frame.origin.y;
+                float drawW = viewW;
+                float drawH = viewH;
+                
+                float u0 = 0.0f, v0 = 0.0f, u1 = 1.0f, v1 = 1.0f;
+                
+                PVContentMode mode = imgView.contentMode;
+                
+                if (mode == PVContentModeScaleAspectFit) {
+                    float scale = fminf(viewW / texW, viewH / texH);
+                    drawW = texW * scale;
+                    drawH = texH * scale;
+                    drawX += (viewW - drawW) / 2.0f;
+                    drawY += (viewH - drawH) / 2.0f;
+                } else if (mode == PVContentModeScaleAspectFill) {
+                    float scale = fmaxf(viewW / texW, viewH / texH);
+                    float uvW = viewW / (texW * scale);
+                    float uvH = viewH / (texH * scale);
+                    u0 = 0.5f - uvW / 2.0f;
+                    u1 = 0.5f + uvW / 2.0f;
+                    v0 = 0.5f - uvH / 2.0f;
+                    v1 = 0.5f + uvH / 2.0f;
+                } else if (mode == PVContentModeTile) {
+                    u1 = viewW / texW;
+                    v1 = viewH / texH;
+                }
+                
+                // Construct Vertices
+                // BL, BR, TL, BR, TR, TL (Standard Quad)
+                // Note: CGImage loaded into CGBitmapContext (bottom-left origin) then to texture.
+                // Texture coords 0,0 is top-left usually for Metal?
+                // Let's assume u=0,v=0 is Top-Left of image.
+                // If CGBitmapContext was standard, 0,0 is bottom-left.
+                // So image might be upside down. If so, swap v0/v1.
+                // For now, assume standard orientation.
+                
+                TextVertex vertices[6];
+                // BL
+                vertices[0].position[0] = drawX; vertices[0].position[1] = drawY + drawH;
+                vertices[0].texCoord[0] = u0; vertices[0].texCoord[1] = v1;
+                // BR
+                vertices[1].position[0] = drawX + drawW; vertices[1].position[1] = drawY + drawH;
+                vertices[1].texCoord[0] = u1; vertices[1].texCoord[1] = v1;
+                // TL
+                vertices[2].position[0] = drawX; vertices[2].position[1] = drawY;
+                vertices[2].texCoord[0] = u0; vertices[2].texCoord[1] = v0;
+                
+                // BR
+                vertices[3] = vertices[1];
+                // TR
+                vertices[4].position[0] = drawX + drawW; vertices[4].position[1] = drawY;
+                vertices[4].texCoord[0] = u1; vertices[4].texCoord[1] = v0;
+                // TL
+                vertices[5] = vertices[2];
+                
+                // Draw
+                [renderEncoder setRenderPipelineState:gMetalTexturePipeline];
+                [renderEncoder setFragmentTexture:texture atIndex:0];
+                
+                Uniforms pixelUniforms;
+                pixelUniforms.scale[0] = 2.0f / screenSize.width;
+                pixelUniforms.scale[1] = -2.0f / screenSize.height;
+                pixelUniforms.offset[0] = -1.0f;
+                pixelUniforms.offset[1] = 1.0f;
+                pixelUniforms.color[0] = 1; pixelUniforms.color[1] = 1; pixelUniforms.color[2] = 1; pixelUniforms.color[3] = 1;
+                
+                [renderEncoder setVertexBytes:&pixelUniforms length:sizeof(Uniforms) atIndex:1];
+                [renderEncoder setFragmentBytes:&pixelUniforms length:sizeof(Uniforms) atIndex:1];
+                
+                [renderEncoder setVertexBytes:vertices length:sizeof(vertices) atIndex:0];
+                [renderEncoder drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:6];
+                
+                // Restore solid pipeline
+                [renderEncoder setRenderPipelineState:gMetalPipeline];
+                [renderEncoder setVertexBuffer:gMetalVertexBuffer offset:0 atIndex:0];
+            }
+        }
+    }
     
     // Draw Text
     NSString *text = nil;
