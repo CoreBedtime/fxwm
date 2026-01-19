@@ -90,6 +90,38 @@
         '';
       };
 
+      # arm64e bridge dylib (with pointer authentication) - uses system clang for arm64e support
+      bridgeDylib = pkgsAarch64.stdenvNoCC.mkDerivation {
+        pname = "libbridge-arm64e";
+        version = "1.0";
+        src = ./bridge;
+        __noChroot = true;
+        dontFixup = true;
+        buildPhase = ''
+          # Unset nix SDK-related variables
+          unset SDKROOT
+          unset DEVELOPER_DIR
+          unset NIX_APPLE_SDK_VERSION
+
+          export PATH=/usr/bin:/bin:/usr/sbin
+          echo "Building from directory: $(pwd)"
+          echo "Contents:"
+          ls -la
+          xcrun clang -arch arm64e -dynamiclib -o libbridge.dylib \
+            -I"$src" \
+            -I${./manager} \
+            -framework Foundation -framework AppKit -framework QuartzCore \
+            -I${dobbyArm64e}/include \
+            -L${dobbyArm64e}/lib -ldobby \
+            -lc++ \
+            bridge.m ${./manager}/sym.c
+        '';
+        installPhase = ''
+          mkdir -p $out/lib
+          cp libbridge.dylib $out/lib/
+        '';
+      };
+
       # arm64e fxwm binary (with pointer authentication) - uses system clang for arm64e support
       fxwmArm64e = pkgsAarch64.stdenvNoCC.mkDerivation {
         pname = "fxwm-arm64e";
@@ -110,6 +142,7 @@
           mkdir -p $out/bin
           cp fxwm $out/bin/
           cp ${dylibArm64e}/lib/libprotein_render.dylib $out/
+          cp ${bridgeDylib}/lib/libbridge.dylib $out/
         '';
       };
     in
@@ -118,6 +151,7 @@
         default = fxwmArm64e;
         dylib = dylibArm64e;
         dobby = dobbyArm64e;
+        bridge = bridgeDylib;
       });
 
       apps = forAllSystems (system: let pkgs = pkgsFor.${system}; in {
