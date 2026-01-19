@@ -1,5 +1,11 @@
 # Basalt
 
+<div align="center">
+
+![Project Logo](project-logo.png)
+
+</div>
+
 A Work-In-Progress Desktop Environment for macOS.
 
 **⚠️ WARNING: EXTREMELY EXPERIMENTAL ⚠️**
