@@ -26,6 +26,9 @@ typedef struct subprocess {
 // Execute a command and return subprocess handle
 subprocess_t *subprocess_execute(const char *command, const char **argv, const char *working_dir);
 
+// Execute a command as a specific user and return subprocess handle
+subprocess_t *subprocess_execute_as_user(const char *command, const char **argv, const char *working_dir, const char *username);
+
 // Wait for subprocess to complete and return exit code
 int subprocess_wait(subprocess_t *process);
 

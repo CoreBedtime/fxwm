@@ -12,8 +12,10 @@
 #include <string.h>
 #include <errno.h>
 #include <signal.h>
+#include <pwd.h>
+#include <grp.h>
 
-subprocess_t *subprocess_execute(const char *command, const char **argv, const char *working_dir) {
+static subprocess_t *_subprocess_execute_internal(const char *command, const char **argv, const char *working_dir, uid_t uid, gid_t gid, const char *username) {
     subprocess_t *process = malloc(sizeof(subprocess_t));
     if (!process) return NULL;
     
@@ -46,6 +48,24 @@ subprocess_t *subprocess_execute(const char *command, const char **argv, const c
         close(stdin_pipe[0]);
         close(stdout_pipe[1]);
         close(stderr_pipe[1]);
+
+        if (username) {
+            if (initgroups(username, gid) == -1) {
+                // perror("initgroups");
+            }
+        }
+
+        if (gid != (gid_t)-1) {
+            if (setgid(gid) == -1) {
+                // perror("setgid");
+            }
+        }
+
+        if (uid != (uid_t)-1) {
+            if (setuid(uid) == -1) {
+                // perror("setuid");
+            }
+        }
         
         if (working_dir && chdir(working_dir) == -1) {
             exit(127);
@@ -73,6 +93,17 @@ subprocess_t *subprocess_execute(const char *command, const char **argv, const c
     process->is_running = true;
     
     return process;
+}
+
+subprocess_t *subprocess_execute(const char *command, const char **argv, const char *working_dir) {
+    return _subprocess_execute_internal(command, argv, working_dir, -1, -1, NULL);
+}
+
+subprocess_t *subprocess_execute_as_user(const char *command, const char **argv, const char *working_dir, const char *username) {
+    struct passwd *pwd = getpwnam(username);
+    if (!pwd) return NULL;
+    
+    return _subprocess_execute_internal(command, argv, working_dir, pwd->pw_uid, pwd->pw_gid, username);
 }
 
 int subprocess_wait(subprocess_t *process) {

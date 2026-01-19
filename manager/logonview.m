@@ -109,7 +109,7 @@ NSArray* GetUserList() {
 }
 
 extern
-void CreateDesktopView(PVView *gRootView, char * username);
+void CreateDesktopView(PVView *gRootView, char * username, char * password);
 
 void CreateLogonView(PVView *gRootView) {
     NSArray *users = GetUserList();
@@ -165,7 +165,7 @@ void CreateLogonView(PVView *gRootView) {
             [tf removeFromSuperview];
             [sv removeFromSuperview];
 
-            CreateDesktopView(gRootView, gSelectedUsername.UTF8String);
+            CreateDesktopView(gRootView, gSelectedUsername.UTF8String, trimmedText.UTF8String);
         } else {
             statusLbl.text = @"Login failed. Try again.";
             statusLbl.textColor = 0xFF0000FF; // Red

@@ -30,6 +30,8 @@
 
 @property (nonatomic, copy) NSString *text;
 @property (nonatomic, assign) uint32_t textColor;
+
+- (void)safeSetText:(NSString *)text;
 @end
 
 @interface PVButton : PVView {

@@ -99,6 +99,12 @@
     return _text;
 }
 
+- (void)safeSetText:(NSString *)text {
+    @synchronized(self) {
+        [self setText:text];
+    }
+}
+
 @end
 
 @implementation PVButton
